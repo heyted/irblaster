@@ -1,0 +1,69 @@
+#! /usr/bin/python3
+# -*- coding: utf-8 -*-
+#
+# This is free software; you can redistribute it and/or modify it under
+# the terms of the GNU General Public License as published by the Free
+# Software Foundation; either version 3 of the License, or any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License along
+# with this application. If not, see <http://www.gnu.org/licenses/>.
+##################################################################################
+
+import argparse
+import subprocess
+import os
+import logging
+from time import sleep
+from datetime import datetime
+
+if __name__ == '__main__':
+    logging.basicConfig(format='%(levelname)s:%(message)s', filename='/tmp/irblaster.log', filemode='a', level=logging.INFO)
+    logging.info(" " + str(datetime.now()) + " Starting irblaster")
+    parser = argparse.ArgumentParser()
+    parser.add_argument('arg_1', default='', nargs='?')
+    args = parser.parse_args()
+    arg_1 = args.arg_1
+    if arg_1:
+        logging.info(" Argument passed to irblaster: "+arg_1)
+        lock = '/tmp/.irblaster_lock'
+        # Use lock file to prevent power toggle upon subsequent channel changes by entering digit(s):
+        if os.path.isfile(lock):
+            first_digit=False
+        else:
+            first_digit=True
+        for i in range(len(arg_1)):
+            if arg_1[i].isdigit():
+                if first_digit:
+                    logging.info(" Sending P and digit(s) from arg")
+                else:
+                    logging.info(" Sending digit(s) from arg")
+                break
+        for i in range(len(arg_1)):
+            if arg_1[i].isdigit():
+                if first_digit:
+                    # Create lock file to toggle power upon first arg containing digit:
+                    if not os.path.isfile(lock):
+                        with open(lock, 'w') as f:
+                            pass
+                    cmd = 'irsend --device=/var/run/lirc/lircd-blaster SEND_ONCE box_01 P'
+                    subprocess.run(cmd, shell=True)
+                    sleep(0.4)
+                    first_digit=False
+                cmd = 'irsend --device=/var/run/lirc/lircd-blaster SEND_ONCE box_01 ' + arg_1[i]
+                subprocess.run(cmd, shell=True)
+                sleep(0.4)
+        if arg_1 == 'P':
+            if os.path.isfile(lock):
+                logging.info(" Sending P")
+                cmd = 'irsend --device=/var/run/lirc/lircd-blaster SEND_ONCE box_01 P'
+                subprocess.run(cmd, shell=True)
+                os.remove(lock)
+            else:
+                logging.info(" P in arg without first arg used containing digit - skipping")
+    else:
+        logging.info(" No argument passed to irblaster (examples: irblaster 123, irblaster P)")
