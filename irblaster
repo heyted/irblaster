@@ -52,11 +52,11 @@ if __name__ == '__main__':
                             pass
                     cmd = 'irsend --device=/var/run/lirc/lircd-blaster SEND_ONCE box_01 P'
                     subprocess.run(cmd, shell=True)
-                    sleep(0.4)
+                    sleep(0.5)
                     first_digit=False
                 cmd = 'irsend --device=/var/run/lirc/lircd-blaster SEND_ONCE box_01 ' + arg_1[i]
                 subprocess.run(cmd, shell=True)
-                sleep(0.4)
+                sleep(0.5)
         if arg_1 == 'P':
             if os.path.isfile(lock):
                 logging.info(" Sending P")
