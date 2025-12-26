@@ -14,14 +14,22 @@
 # with this application. If not, see <http://www.gnu.org/licenses/>.
 ##################################################################################
 
-import argparse
-import subprocess
-import os
-import logging
+import argparse, subprocess, os, logging, requests
 from time import sleep
-from datetime import datetime
+from datetime import date, datetime, timedelta, timezone
+
+class mythAPI:
+    def __init__(self, host, port):
+        self.baseAddr = 'http://{}:{}/'.format(host, port)
+        self.headers = {'Accept':'application/json'}
+    def GetUpcomingRec(self, **params):
+        UpcomingRec = requests.get('{}Dvr/GetUpcomingList'.format(self.baseAddr), params = params, headers = self.headers)
+        if UpcomingRec:
+            return UpcomingRec.json()
 
 if __name__ == '__main__':
+    mythaddr = 'localhost'
+    mythport = '6544'
     logging.basicConfig(format='%(levelname)s:%(message)s', filename='/tmp/irblaster.log', filemode='a', level=logging.INFO)
     logging.info(" " + str(datetime.now()) + " Starting irblaster")
     parser = argparse.ArgumentParser()
@@ -57,13 +65,32 @@ if __name__ == '__main__':
                 cmd = 'irsend --device=/var/run/lirc/lircd-blaster SEND_ONCE box_01 ' + arg_1[i]
                 subprocess.run(cmd, shell=True)
                 sleep(0.5)
+        #Send P to power off device:
         if arg_1 == 'P':
             if os.path.isfile(lock):
-                logging.info(" Sending P")
-                cmd = 'irsend --device=/var/run/lirc/lircd-blaster SEND_ONCE box_01 P'
-                subprocess.run(cmd, shell=True)
-                os.remove(lock)
+                #Check if subsequent recording is imminent:
+                mapi = mythAPI(mythaddr, mythport)
+                upcoming = mapi.GetUpcomingRec()['ProgramList']['Programs']
+                upcomingList = []
+                for i in range(len(upcoming)):
+                    upcomStartTm = datetime.strptime(upcoming[i]['StartTime'].replace('Z', ''), '%Y-%m-%dT%H:%M:%S')
+                    upcomEndTm = datetime.strptime(upcoming[i]['EndTime'].replace('Z', ''), '%Y-%m-%dT%H:%M:%S')
+                    upcomingList.append([upcomStartTm, upcomEndTm])
+                no_rec_soon = True
+                if upcomingList:
+                    d_time_soon = datetime.now(timezone.utc).replace(tzinfo=None) + timedelta(minutes=1) # UTC
+                    for i in range(len(upcomingList)):
+                        if d_time_soon > upcomingList[i][0] and d_time_soon < upcomingList[i][1]:
+                            no_rec_soon = False
+                            break
+                if no_rec_soon:                 
+                    logging.info(" Sending P")
+                    cmd = 'irsend --device=/var/run/lirc/lircd-blaster SEND_ONCE box_01 P'
+                    subprocess.run(cmd, shell=True)
+                    os.remove(lock)
+                else:
+                    logging.info(" P in arg, but no need to power off device due to additional recording - skipping")
             else:
-                logging.info(" P in arg without first arg used containing digit (skipping)")
+                logging.info(" P in arg, but no need to power off device - skipping (this is normal)")
     else:
         logging.info(" No argument passed to irblaster (examples: irblaster 123, irblaster P)")
